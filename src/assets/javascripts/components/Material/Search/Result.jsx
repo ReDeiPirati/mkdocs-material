@@ -21,7 +21,7 @@
  */
 
 import escape from "escape-string-regexp"
-import lunr from "lunr"
+import lunr from "expose-loader?lunr!lunr"
 
 /* ----------------------------------------------------------------------------
  * Class
@@ -39,6 +39,7 @@ export default class Result {
    * @property {Object} docs_ - Indexed documents
    * @property {HTMLElement} meta_ - Search meta information
    * @property {HTMLElement} list_ - Search result list
+   * @property {Array<string>} lang_ - Search languages
    * @property {Object} message_ - Search result messages
    * @property {Object} index_ - Search index
    * @property {string} value_ - Last input value
@@ -69,6 +70,11 @@ export default class Result {
       one: this.meta_.dataset.mdLangResultOne,
       other: this.meta_.dataset.mdLangResultOther
     }
+
+    /* Load search languages */
+    this.lang_ = this.el_.dataset.mdLangSearch.split(",")
+      .filter(Boolean)
+      .map(lang => lang.trim())
   }
 
   /**
@@ -134,8 +140,20 @@ export default class Result {
         }, new Map)
 
         /* eslint-disable no-invalid-this, lines-around-comment */
-        const docs = this.docs_
+        const docs = this.docs_,
+              lang = this.lang_
+
+        /* Create index */
         this.index_ = lunr(function() {
+
+          /* Set up stemmers for search languages */
+          if (lang.length === 1) {
+            this.use(lunr[lang[0]])
+          } else if (lang.length > 1) {
+            this.use(lunr.multiLanguage(...lang))
+          }
+
+          /* Index fields */
           this.field("title", { boost: 10 })
           this.field("text")
           this.ref("location")
@@ -191,7 +209,7 @@ export default class Result {
 
       /* Assemble highlight regex from query string */
       const match = new RegExp(
-        `\\b(${escape(this.value_.trim()).replace(" ", "|")})`, "img")
+        `(?:^|\\s)(${escape(this.value_.trim()).replace(" ", "|")})`, "img")
       const highlight = string => `<em>${string}</em>`
 
       /* Render results */
@@ -202,7 +220,7 @@ export default class Result {
         this.list_.appendChild(
           <li class="md-search-result__item">
             <a href={doc.location} title={doc.title}
-                class="md-search-result__link">
+              class="md-search-result__link">
               <article class="md-search-result__article
                     md-search-result__article--document">
                 <h1 class="md-search-result__title">
@@ -218,7 +236,7 @@ export default class Result {
               const section = this.docs_.get(item.ref)
               return (
                 <a href={section.location} title={section.title}
-                    class="md-search-result__link" data-md-rel="anchor">
+                  class="md-search-result__link" data-md-rel="anchor">
                   <article class="md-search-result__article">
                     <h1 class="md-search-result__title">
                       {{ __html: section.title.replace(match, highlight) }}
@@ -226,7 +244,7 @@ export default class Result {
                     {section.text.length ?
                       <p class="md-search-result__teaser">
                         {{ __html: this.truncate_(
-                            section.text.replace(match, highlight), 400)
+                          section.text.replace(match, highlight), 400)
                         }}
                       </p> : {}}
                   </article>
